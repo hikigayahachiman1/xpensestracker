@@ -6,6 +6,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="shortcut icon" href="https://i.ibb.co/Rk6Y92Bf/10986471.png">
 <title>Xpenses Tracker</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Xpenses Tracker">
+<link rel="apple-touch-icon" href="https://i.ibb.co/Rk6Y92Bf/10986471.png">
 <style>
 /* ===== RESET & BASE ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -277,6 +284,43 @@ textarea.form-input{resize:vertical;min-height:70px}
 </style>
 </head>
 <body>
+
+<!-- ===== PIN SCREEN ===== -->
+<div id="pin-screen" style="position:fixed;inset:0;z-index:99999;background:#0f1117;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="text-align:center;margin-bottom:32px">
+    <div style="font-size:3rem;margin-bottom:8px">💰</div>
+    <div style="font-size:1.3rem;font-weight:700;color:var(--accent2,#ee2456);letter-spacing:.5px">Xpenses Tracker💰</div>
+    <div id="pin-subtitle" style="font-size:.8rem;color:#64748b;margin-top:4px">Masukkan PIN untuk masuk</div>
+  </div>
+  <div id="pin-dots" style="display:flex;gap:14px;margin-bottom:32px">
+    <div class="pin-dot" style="width:14px;height:14px;border-radius:50%;background:#2d3748;border:2px solid #3d4a63;transition:all .15s ease"></div>
+    <div class="pin-dot" style="width:14px;height:14px;border-radius:50%;background:#2d3748;border:2px solid #3d4a63;transition:all .15s ease"></div>
+    <div class="pin-dot" style="width:14px;height:14px;border-radius:50%;background:#2d3748;border:2px solid #3d4a63;transition:all .15s ease"></div>
+    <div class="pin-dot" style="width:14px;height:14px;border-radius:50%;background:#2d3748;border:2px solid #3d4a63;transition:all .15s ease"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
+    <button class="pin-btn" onclick="pinPress('1')">1</button>
+    <button class="pin-btn" onclick="pinPress('2')">2</button>
+    <button class="pin-btn" onclick="pinPress('3')">3</button>
+    <button class="pin-btn" onclick="pinPress('4')">4</button>
+    <button class="pin-btn" onclick="pinPress('5')">5</button>
+    <button class="pin-btn" onclick="pinPress('6')">6</button>
+    <button class="pin-btn" onclick="pinPress('7')">7</button>
+    <button class="pin-btn" onclick="pinPress('8')">8</button>
+    <button class="pin-btn" onclick="pinPress('9')">9</button>
+    <button class="pin-btn" id="pin-forgot-btn" onclick="pinForgot()" style="font-size:.62rem;color:#64748b;background:#1e2535">Lupa PIN</button>
+    <button class="pin-btn" onclick="pinPress('0')">0</button>
+    <button class="pin-btn" onclick="pinDelete()">⌫</button>
+  </div>
+  <div id="pin-error" style="margin-top:20px;font-size:.8rem;color:#ef4444;min-height:20px;text-align:center"></div>
+</div>
+
+<style>
+.pin-btn{width:72px;height:72px;border-radius:50%;background:#161b27;border:1px solid #2d3748;color:#e2e8f0;font-size:1.4rem;font-weight:600;cursor:pointer;transition:all .12s ease;display:flex;align-items:center;justify-content:center;margin:0 auto}
+.pin-btn:active{background:#252d42;transform:scale(.92)}
+@keyframes pinShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+</style>
+
 <div id="app">
   <div class="header">
     <div style="display:flex;align-items:center;gap:10px">
@@ -2600,13 +2644,181 @@ function deleteIncome(id) {
 }
 
 // =====================================================
+// PIN SYSTEM
+// =====================================================
+const PIN_KEY = 'xpenses_pin';
+let pinBuffer = '';
+let pinMode   = 'check';
+let pinFirst  = '';
+
+function pinGetStored() { return localStorage.getItem(PIN_KEY) || ''; }
+
+function pinUpdateDots(buf) {
+  document.querySelectorAll('.pin-dot').forEach((d, i) => {
+    d.style.background  = i < buf.length ? '#6366f1' : '#2d3748';
+    d.style.borderColor = i < buf.length ? '#6366f1' : '#3d4a63';
+    d.style.transform   = i < buf.length ? 'scale(1.18)' : 'scale(1)';
+  });
+}
+
+function pinSetSubtitle(txt, color) {
+  const el = document.getElementById('pin-subtitle');
+  el.textContent = txt;
+  el.style.color = color || '#64748b';
+}
+
+function pinShowError(msg) {
+  document.getElementById('pin-error').textContent = msg;
+  const dots = document.getElementById('pin-dots');
+  dots.style.animation = 'none';
+  dots.offsetHeight;
+  dots.style.animation = 'pinShake .4s ease';
+  setTimeout(() => { document.getElementById('pin-error').textContent = ''; }, 1600);
+}
+
+function pinUnlock() {
+  document.querySelectorAll('.pin-dot').forEach(d => {
+    d.style.background = '#22c55e'; d.style.borderColor = '#22c55e';
+  });
+  const ps = document.getElementById('pin-screen');
+  setTimeout(() => {
+    ps.style.opacity = '0';
+    ps.style.transition = 'opacity .25s ease';
+    setTimeout(() => {
+      ps.style.display = 'none';
+      document.getElementById('app').style.display = '';
+      setTimeout(() => document.getElementById('qa-amount').focus(), 100);
+    }, 250);
+  }, 280);
+}
+
+function pinPress(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  pinUpdateDots(pinBuffer);
+  if (pinBuffer.length < 4) return;
+
+  const entered = pinBuffer;
+  pinBuffer = '';
+  setTimeout(() => pinUpdateDots(''), 180);
+
+  if (pinMode === 'set') {
+    pinFirst = entered; pinMode = 'confirm';
+    pinSetSubtitle('Konfirmasi PIN Anda', '#94a3b8');
+    return;
+  }
+  if (pinMode === 'confirm') {
+    if (entered !== pinFirst) {
+      pinMode = 'set'; pinFirst = '';
+      pinSetSubtitle('Buat PIN 4 digit baru', '#94a3b8');
+      pinShowError('PIN tidak cocok, coba lagi');
+      return;
+    }
+    localStorage.setItem(PIN_KEY, entered);
+    pinSetSubtitle('PIN berhasil dibuat! ✓', '#22c55e');
+    setTimeout(() => pinUnlock(), 500);
+    return;
+  }
+  if (entered === pinGetStored()) {
+    pinUnlock();
+  } else {
+    pinShowError('PIN salah, coba lagi');
+  }
+}
+
+function pinDelete() {
+  if (!pinBuffer.length) return;
+  pinBuffer = pinBuffer.slice(0, -1);
+  pinUpdateDots(pinBuffer);
+}
+
+function pinForgot() {
+  if (!confirm('Reset PIN akan menghapus SEMUA data aplikasi. Yakin?')) return;
+  localStorage.clear();
+  location.reload();
+}
+
+function changePin() {
+  pinBuffer = ''; pinFirst = ''; pinMode = 'set';
+  pinUpdateDots('');
+  pinSetSubtitle('Buat PIN baru', '#94a3b8');
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('pin-forgot-btn').style.display = 'flex';
+  const ps = document.getElementById('pin-screen');
+  ps.style.opacity = '0'; ps.style.transition = 'none';
+  ps.style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  setTimeout(() => { ps.style.transition = 'opacity .2s ease'; ps.style.opacity = '1'; }, 10);
+}
+
+// Keyboard support
+document.addEventListener('keydown', e => {
+  const ps = document.getElementById('pin-screen');
+  if (ps && ps.style.display !== 'none' && ps.style.display !== '') {
+    if (e.key >= '0' && e.key <= '9') { e.preventDefault(); pinPress(e.key); }
+    if (e.key === 'Backspace') { e.preventDefault(); pinDelete(); }
+  }
+});
+
+// =====================================================
 // INIT
 // =====================================================
 initDB();
 populateQuickAdd();
 setQACurrency('THB');
-setTimeout(() => document.getElementById('qa-amount').focus(), 80);
 renderDashboard();
+
+// Inisialisasi PIN screen
+(function() {
+  document.getElementById('app').style.display = 'none';
+  const stored = pinGetStored();
+  if (!stored) {
+    pinMode = 'set';
+    pinSetSubtitle('Buat PIN 4 digit baru', '#94a3b8');
+    document.getElementById('pin-forgot-btn').style.display = 'none';
+  } else {
+    pinMode = 'check';
+    pinSetSubtitle('Masukkan PIN untuk masuk', '#64748b');
+  }
+})();
+
+// Inject card PIN ke Settings
+const _baseRenderSettings = renderSettings;
+renderSettings = function() {
+  _baseRenderSettings();
+  const sc = document.getElementById('settings-content');
+  if (sc && !sc.querySelector('#pin-settings-card')) {
+    const pinCard = document.createElement('div');
+    pinCard.className = 'card';
+    pinCard.id = 'pin-settings-card';
+    pinCard.innerHTML = `
+      <div class="card-title">🔐 Keamanan PIN</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Ganti PIN</div>
+          <div class="setting-desc">Ubah PIN 4 digit untuk masuk ke aplikasi</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="changePin()">Ganti PIN</button>
+      </div>
+      <div class="setting-row" style="border-bottom:none">
+        <div>
+          <div class="setting-label" style="color:var(--red)">Reset PIN & Data</div>
+          <div class="setting-desc">Hapus semua data dan reset PIN</div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="pinForgot()">Reset</button>
+      </div>
+    `;
+    sc.insertBefore(pinCard, sc.firstChild);
+  }
+};
+
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .catch(e => console.log('SW:', e));
+  });
+}
 </script>
 <!-- PRANK SCREEN -->
 <div id="prankScreen">
